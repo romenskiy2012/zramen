@@ -46,17 +46,19 @@ Usage:
          [-s|--size <uint>]
          [-m|--max-size <uint>]
          [-p|--priority <int>]
+         [-b|--backing-device <dev>]
          make
   zramen toss
 
 Options:
-  -h, --help       Show this help text
-  -v, --version    Show program version
-  -a, --algorithm  Compression algorithm for zram (Default: $ZRAM_COMP_ALGORITHM)
-  -n, --num        Number of compression streams for zram (Default: $ZRAM_STREAMS)
-  -p, --priority   Priority of zram swap device (Default: $ZRAM_PRIORITY)
-  -s, --size       Percentage of memory to allocate for zram (Default: $ZRAM_SIZE)
-  -m, --max-size   Maximum size of zram in MiB (optional)
+  -h, --help             Show this help text
+  -v, --version          Show program version
+  -a, --algorithm        Compression algorithm for zram (Default: $ZRAM_COMP_ALGORITHM)
+  -n, --num              Number of compression streams for zram (Default: $ZRAM_STREAMS)
+  -p, --priority         Priority of zram swap device (Default: $ZRAM_PRIORITY)
+  -s, --size             Percentage of memory to allocate for zram (Default: $ZRAM_SIZE)
+  -m, --max-size         Maximum size of zram in MiB (optional)
+  -b, --backing-device   Backing device to use for incompressible pages
 
 Commands:
   make        Make zram swap device
@@ -83,6 +85,10 @@ Size
 
 Max Size
   Maximum size of created zram; use if plenty of memory
+
+Backing Device
+  Backing device to use for incompressible pages
+
 EOF
 echo "$_usage_string"
 }
@@ -122,6 +128,11 @@ while [[ $# -gt 0 ]]; do
       ;;
     -m|--max-size)
       _max_size="$2"
+      shift
+      shift
+      ;;
+    -b|--backing-device)
+      _backing_device="$2"
       shift
       shift
       ;;
@@ -240,17 +251,7 @@ make() {
 
   for ((i=0; i < 10; i++)); do
     INFO 'Attempting to initialize free device'
-    _tmp="$(mktemp)"
-    # return name of first free device
-    zramctl \
-      --algorithm "$_algorithm" \
-      --find \
-      --size "${_mem_to_alloc}MiB" \
-      --streams "$_streams" &> \
-      "$_tmp"
-    read -r _output < "$_tmp"
-    rm -f "$_tmp"
-    unset _tmp
+    _output="$(zramctl --find 2>&1)"
     case "$_output" in
       *'failed to reset: Device or resource busy'*)
         sleep 1
@@ -275,6 +276,26 @@ make() {
   if [[ -b "$_zram_dev" ]]; then
     INFO "Successfully initialized zram swap device: $_zram_dev"
     mkdir -p "$WORK_DIR/zram"
+
+    if [[ ! -z "$_backing_device" ]]; then
+      if [[ -b "$_backing_device" ]]; then
+        echo 1 > /sys/block/$(basename "$_zram_dev")/reset \
+          && echo "$_backing_device" > /sys/block/$(basename "$_zram_dev")/backing_dev \
+          && INFO "Successfully initialized zram backing device: $_backing_device" \
+          || WARN "Failed to write to /sys/block/$(basename "$_zram_dev")/backing_dev"
+      else
+        WARN "failed to find backing device $_backing_device"
+      fi
+    else
+      INFO "Continuing without any backing device"
+    fi
+
+    zramctl \
+      "$_zram_dev" \
+      --algorithm "$_algorithm" \
+      --size "${_mem_to_alloc}MiB" \
+      --streams "$_streams"
+
     mkswap "$_zram_dev" --label "$(basename "$_zram_dev")" &> /dev/null \
       && swapon --discard --priority $_priority "$_zram_dev" \
       && ln --symbolic "$_zram_dev" "$WORK_DIR/zram/"
