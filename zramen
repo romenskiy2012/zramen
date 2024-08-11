@@ -84,7 +84,7 @@ Size
   Percentage of memory to allocate for zram; try <= 50
 
 Max Size
-  Maximum size of created zram; use if plenty of memory
+  Maximum size of created zram in MiB; use if plenty of memory
 
 Backing Device
   Backing device to use for incompressible pages
