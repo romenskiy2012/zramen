@@ -284,7 +284,7 @@ make() {
           && INFO "Successfully initialized zram backing device: $_backing_device" \
           || WARN "Failed to write to /sys/block/$(basename "$_zram_dev")/backing_dev"
       else
-        WARN "failed to find backing device $_backing_device"
+        WARN "Failed to find backing device $_backing_device"
       fi
     else
       INFO "Continuing without any backing device"
