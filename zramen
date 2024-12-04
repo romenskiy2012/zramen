@@ -277,7 +277,7 @@ make() {
     INFO "Successfully initialized zram swap device: $_zram_dev"
     mkdir -p "$WORK_DIR/zram"
 
-    if ! [[ -z "$_backing_device" ]]; then
+    if [[ -n "$_backing_device" ]]; then
       if [[ -b "$_backing_device" ]]; then
         echo 1 > /sys/block/$(basename "$_zram_dev")/reset \
           && echo "$_backing_device" > /sys/block/$(basename "$_zram_dev")/backing_dev \
