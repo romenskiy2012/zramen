@@ -15,6 +15,10 @@ readonly ZRAM_COMP_ALGORITHM="${ZRAM_COMP_ALGORITHM:-$COMP_ALGORITHM}"
 readonly PRIORITY=32767
 readonly ZRAM_PRIORITY="${ZRAM_PRIORITY:-$PRIORITY}"
 
+# set zramen log level
+readonly QUIET=0
+readonly ZRAMEN_QUIET="${ZRAMEN_QUIET:-$QUIET}"
+
 # allocate this percentage of memory for zram by default
 readonly SIZE=25
 readonly ZRAM_SIZE="${ZRAM_SIZE:-$SIZE}"
@@ -47,6 +51,7 @@ Usage:
          [-m|--max-size <uint>]
          [-p|--priority <int>]
          [-b|--backing-device <dev>]
+         [-q|--quiet]
          make
   zramen toss
 
@@ -59,6 +64,7 @@ Options:
   -s, --size             Percentage of memory to allocate for zram (Default: $ZRAM_SIZE)
   -m, --max-size         Maximum size of zram in MiB (optional)
   -b, --backing-device   Backing device to use for incompressible pages
+  -q, --quiet            Disable info messages
 
 Commands:
   make        Make zram swap device
@@ -136,6 +142,10 @@ while [[ $# -gt 0 ]]; do
       shift
       shift
       ;;
+    -q|--quiet)
+      _quiet=1
+      shift
+      ;;
     -*)
       # unknown option
       _usage
@@ -163,6 +173,16 @@ set -- "${_POSITIONAL[@]}"
 
 # end usage }}}
 # ==============================================================================
+
+_quiet="${_quiet:-$ZRAMEN_QUIET}"
+case "$_quiet" in
+  0|1)
+    ;;
+  *)
+    WARN 'Improper value for quiet, using default'
+    _quiet=0
+    ;;
+esac
 
 # sanitize compression algorithm input
 _algorithm="${_algorithm:-$ZRAM_COMP_ALGORITHM}"
@@ -206,7 +226,9 @@ _streams=${_streams:-$ZRAM_STREAMS}
   || _streams=$STREAMS
 
 INFO() {
-  echo "zramen#info: $*"
+  if [[ $_quiet -eq 0 ]] then
+    echo "zramen#info: $*"
+  fi
 }
 
 WARN() {
