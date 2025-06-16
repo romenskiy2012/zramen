@@ -26,10 +26,6 @@ readonly ZRAM_SIZE="${ZRAM_SIZE:-$SIZE}"
 # set maximum size of zram in MiB
 readonly MAX_SIZE=4096
 
-# set maximum number of compression streams for zram
-readonly STREAMS=$(nproc)
-readonly ZRAM_STREAMS="${ZRAM_STREAMS:-$STREAMS}"
-
 # zramen version number
 readonly VERSION=0.7.1
 
@@ -59,7 +55,6 @@ Options:
   -h, --help             Show this help text
   -v, --version          Show program version
   -a, --algorithm        Compression algorithm for zram (Default: $ZRAM_COMP_ALGORITHM)
-  -n, --num              Number of compression streams for zram (Default: $ZRAM_STREAMS)
   -p, --priority         Priority of zram swap device (Default: $ZRAM_PRIORITY)
   -s, --size             Percentage of memory to allocate for zram (Default: $ZRAM_SIZE)
   -m, --max-size         Maximum size of zram in MiB (optional)
@@ -79,9 +74,6 @@ Algorithm
   | zstd
   | deflate
   | 842
-
-Num
-  Number of zram compression streams; try one per core
 
 Priority
   Must be an integer <= 32767; higher number means higher zram priority
@@ -113,12 +105,6 @@ while [[ $# -gt 0 ]]; do
       ;;
     -a|--algorithm)
       _algorithm="$2"
-      shift
-      shift
-      ;;
-    -n|--num)
-      _streams="$2"
-      # shift past argument and value
       shift
       shift
       ;;
@@ -216,15 +202,6 @@ if [[ -n $_max_size ]] || [[ -n $ZRAM_MAX_SIZE ]]; then
     || _max_size=$MAX_SIZE
 fi
 
-# sanitize streams input
-_streams=${_streams:-$ZRAM_STREAMS}
-# number of CPUs requested must be 1+
-[[ $_streams -gt 0 ]] \
-  || _streams=1
-# number of CPUs requested must not exceed CPUs available
-[[ $_streams -le $STREAMS ]] \
-  || _streams=$STREAMS
-
 INFO() {
   if [[ $_quiet -eq 0 ]] then
     echo "zramen#info: $*"
@@ -315,8 +292,7 @@ make() {
     zramctl \
       "$_zram_dev" \
       --algorithm "$_algorithm" \
-      --size "${_mem_to_alloc}MiB" \
-      --streams "$_streams"
+      --size "${_mem_to_alloc}MiB"
 
     mkswap "$_zram_dev" --label "$(basename "$_zram_dev")" &> /dev/null \
       && swapon --discard --priority $_priority "$_zram_dev" \
