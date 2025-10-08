@@ -19,6 +19,10 @@ readonly ZRAM_PRIORITY="${ZRAM_PRIORITY:-$PRIORITY}"
 readonly QUIET=0
 readonly ZRAMEN_QUIET="${ZRAMEN_QUIET:-$QUIET}"
 
+# set zramen swapon discard policy
+readonly SWAPON_DISCARD='both'
+readonly ZRAMEN_SWAPON_DISCARD="${ZRAMEN_SWAPON_DISCARD:-$SWAPON_DISCARD}"
+
 # allocate this percentage of memory for zram by default
 readonly SIZE=25
 readonly ZRAM_SIZE="${ZRAM_SIZE:-$SIZE}"
@@ -47,6 +51,7 @@ Usage:
          [-m|--max-size <uint>]
          [-p|--priority <int>]
          [-b|--backing-device <dev>]
+         [-d|--discard <policy>]
          [-q|--quiet]
          make
   zramen toss
@@ -59,6 +64,7 @@ Options:
   -s, --size             Percentage of memory to allocate for zram (Default: $ZRAM_SIZE)
   -m, --max-size         Maximum size of zram in MiB (optional)
   -b, --backing-device   Backing device to use for incompressible pages
+  -d, --discard          Enable swap discards (Default: $ZRAMEN_SWAPON_DISCARD)
   -q, --quiet            Disable info messages
 
 Commands:
@@ -86,6 +92,15 @@ Max Size
 
 Backing Device
   Backing device to use for incompressible pages
+
+Discard
+  Set swapon discard policy; disable for encrypted swap (dm-crypt/LUKS)
+  | false   disable swapon discard
+  | none    disable swapon discard
+  | true    enable swapon discard
+  | both    enable swapon discard
+  | once    enable swapon discard with policy 'once'
+  | pages   enable swapon discard with policy 'pages'
 
 EOF
 echo "$_usage_string"
@@ -125,6 +140,11 @@ while [[ $# -gt 0 ]]; do
       ;;
     -b|--backing-device)
       _backing_device="$2"
+      shift
+      shift
+      ;;
+    -d|--discard)
+      _swapon_discard="$2"
       shift
       shift
       ;;
@@ -201,6 +221,33 @@ if [[ -n $_max_size ]] || [[ -n $ZRAM_MAX_SIZE ]]; then
   [[ $_max_size -gt 0 ]] \
     || _max_size=$MAX_SIZE
 fi
+
+# sanitize discard input
+_swapon_discard="${_swapon_discard:-$ZRAMEN_SWAPON_DISCARD}"
+case "$_swapon_discard" in
+  # omit --discard
+  false|none)
+    _swapon_discard_cli_opts=""
+    ;;
+  # pass --discard without policy specified
+  true|both)
+    _swapon_discard_cli_opts="--discard"
+    ;;
+  # pass --discard with policy 'once'
+  once)
+    # perform single-time discard operation for whole swap area at swapon
+    _swapon_discard_cli_opts="--discard=once"
+    ;;
+  # pass --discard with policy 'pages'
+  pages)
+    # asynchronously discard freed swap pages before they are available for reuse
+    _swapon_discard_cli_opts="--discard=pages"
+    ;;
+  *)
+    WARN 'Improper value for discard, using default'
+    _swapon_discard_cli_opts="--discard"
+    ;;
+esac
 
 INFO() {
   if [[ $_quiet -eq 0 ]] then
@@ -295,7 +342,7 @@ make() {
       --size "${_mem_to_alloc}MiB"
 
     mkswap "$_zram_dev" --label "$(basename "$_zram_dev")" &> /dev/null \
-      && swapon --discard --priority $_priority "$_zram_dev" \
+      && swapon $_swapon_discard_cli_opts --priority $_priority "$_zram_dev" \
       && ln --symbolic "$_zram_dev" "$WORK_DIR/zram/"
   else
     WARN 'Could not get free zram device'
