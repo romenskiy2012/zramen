@@ -31,7 +31,7 @@ readonly ZRAM_SIZE="${ZRAM_SIZE:-$SIZE}"
 readonly MAX_SIZE=4096
 
 # zramen version number
-readonly VERSION=1.0.0
+readonly VERSION=1.0.1
 
 # set TMPDIR to work directory for mktemp
 readonly WORK_DIR='/var/run/zramen'
